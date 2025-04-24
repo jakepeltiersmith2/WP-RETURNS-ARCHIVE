@@ -30,12 +30,6 @@ st.markdown("""
         border-radius: 4px;
         margin-bottom: .75rem;
       }
-      .comment-image img {
-        max-width: 120px !important;
-        height: auto !important;
-        border-radius: 4px;
-        margin-right: .5rem;
-      }
 
       h1 { font-size: 3rem !important; }
       h3 { font-size: 1.75rem !important; }
@@ -69,17 +63,20 @@ def parse_date(s):
         return None
 
 def show_image(path, thumb=False):
-    """ thumb=True → fixed small width; else container_width """
+    """ thumb=True → fixed 300px width; else container_width """
+    width = 300 if thumb else None
+    use_container = False if thumb else True
+
     if path.startswith("http"):
-        st.image(path, width=100 if thumb else None, use_container_width=False if thumb else True)
+        st.image(path, width=width, use_container_width=use_container)
         return
     if os.path.exists(path):
-        st.image(path, width=100 if thumb else None, use_container_width=False if thumb else True)
+        st.image(path, width=width, use_container_width=use_container)
         return
     parts = path.replace("\\","/").split("/media/")
-    if len(parts)==2:
+    if len(parts) == 2:
         url = f"{GITHUB_RAW_MEDIA}/{parts[1]}"
-        st.image(url, width=100 if thumb else None, use_container_width=False if thumb else True)
+        st.image(url, width=width, use_container_width=use_container)
     else:
         st.write(f"🔗 {path}")
 
@@ -122,7 +119,7 @@ grouped = {}
 order_keys = []
 for p in filtered:
     key = (p["author"], p["date"], p.get("text",""))
-    is_empty_text = p.get("text","")==""  # only merge when this is True
+    is_empty_text = (p.get("text","") == "")
     if key not in grouped or not is_empty_text:
         grouped[key] = {
             "author":   key[0],
@@ -164,7 +161,6 @@ for post in grouped_posts[: st.session_state.count]:
                 body = [L for L in lines if L not in tags]
                 txt = ("**" + " ".join(tags) + "** " if tags else "") + " ".join(body).strip()
                 st.write(txt)
-                # small thumbnails now
                 if c.get("images"):
                     thumbs = st.columns(len(c["images"]))
                     for tc, im in zip(thumbs, c["images"]):
