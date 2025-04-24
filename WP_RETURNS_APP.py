@@ -13,23 +13,48 @@ st.set_page_config(
 
 # ——— GLOBAL STYLES ———
 st.markdown("""
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-      html, body, [class*="css"] { font-family: 'Roboto', sans-serif; }
-      .post-card { background: #fff; padding:1rem; margin-bottom:1.5rem;
-                   border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
-      .post-card img { max-width:70% !important; height:auto !important;
-                       border-radius:4px; margin-bottom:.75rem; }
-      .comment-image img { max-width:120px !important; height:auto !important;
-                           border-radius:4px; margin-right:.5rem; }
-      h1 { font-size:3rem !important; }
-      h3 { font-size:1.75rem !important; }
-      p  { font-size:1.25rem !important; line-height:1.6 !important; }
-      .streamlit-expanderHeader { font-size:1.4rem !important; font-weight:500 !important; }
-      .stTextInput input { font-size:1.1rem !important; }
-      .streamlit-expanderContent > div { margin-bottom:1rem; }
-      .block-container { padding-top:1rem; }
-    </style>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+    html, body, [class*="css"] { font-family: 'Roboto', sans-serif; }
+
+    /* Card wrapper: less padding & margin between posts */
+    .post-card {
+      background: #fff;
+      padding: 0.75rem;          /* was 1rem */
+      margin-bottom: 0.5rem;     /* was 1.5rem */
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+
+    /* Tighter spacing around the divider lines */
+    .stMarkdown hr {
+      margin-top: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    /* Main images */
+    .post-card img {
+      max-width: 70% !important;
+      height: auto !important;
+      border-radius: 4px;
+      margin-bottom: 0.5rem;     /* was 0.75rem */
+    }
+
+    /* Comment thumbnails */
+    .comment-image img {
+      max-width: 100px !important; /* smaller thumbs */
+      margin-right: 0.5rem;
+    }
+
+    /* Text sizing (unchanged) */
+    h1 { font-size:3rem !important; }
+    h3 { font-size:1.75rem !important; }
+    p  { font-size:1.25rem !important; line-height:1.6 !important; }
+    .streamlit-expanderHeader { font-size:1.4rem !important; font-weight:500 !important; }
+    .stTextInput input { font-size:1.1rem !important; }
+    .streamlit-expanderContent > div { margin-bottom:1rem; }
+    .block-container { padding-top:1rem; }
+  </style>
 """, unsafe_allow_html=True)
 
 # ——— CONFIG ———
