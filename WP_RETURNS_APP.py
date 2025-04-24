@@ -16,40 +16,39 @@ st.markdown("""
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
       html, body, [class*="css"] { font-family: 'Roboto', sans-serif; }
-      .post-card { 
-        background: #fff; 
-        padding:0.75rem; 
-        margin-bottom:0.5rem;
-        border-radius:8px; 
-        box-shadow:0 1px 4px rgba(0,0,0,0.1);
-      }
-      .stMarkdown hr {
-        margin-top:0.5rem; 
-        margin-bottom:0.5rem;
+
+      .post-card {
+        background: #fff;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
       }
       .post-card img {
-        max-width:70% !important;
-        height:auto !important;
-        border-radius:4px;
-        margin-bottom:0.5rem;
+        max-width: 70% !important;
+        height: auto !important;
+        border-radius: 4px;
+        margin-bottom: .75rem;
       }
       .comment-image img {
-        max-width:100px !important;
-        height:auto !important;
-        margin-right:0.5rem;
+        max-width: 120px !important;
+        height: auto !important;
+        border-radius: 4px;
+        margin-right: .5rem;
       }
-      h1 { font-size:3rem !important; }
-      h3 { font-size:1.75rem !important; }
-      p  { font-size:1.25rem !important; line-height:1.6 !important; }
-      .streamlit-expanderHeader { font-size:1.4rem !important; font-weight:500 !important; }
-      .stTextInput input { font-size:1.1rem !important; }
-      .streamlit-expanderContent > div { margin-bottom:1rem; }
-      .block-container { padding-top:1rem; }
+
+      h1 { font-size: 3rem !important; }
+      h3 { font-size: 1.75rem !important; }
+      p  { font-size: 1.25rem !important; line-height: 1.6 !important; }
+      .streamlit-expanderHeader { font-size: 1.4rem !important; font-weight: 500 !important; }
+      .stTextInput input { font-size: 1.1rem !important; }
+      .streamlit-expanderContent > div { margin-bottom: 1rem; }
+      .block-container { padding-top: 1rem; }
     </style>
 """, unsafe_allow_html=True)
 
 # ——— CONFIG ———
-PAGE_SIZE        = 100
+PAGE_SIZE        = 50
 LOCAL_JSON       = os.path.join(os.path.dirname(__file__), "returns_posts.json")
 GITHUB_RAW_JSON  = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/returns_posts.json"
 GITHUB_RAW_MEDIA = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/media"
@@ -59,7 +58,8 @@ GITHUB_RAW_MEDIA = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETUR
 def load_posts():
     if os.path.exists(LOCAL_JSON):
         return json.load(open(LOCAL_JSON, "r", encoding="utf-8"))
-    r = requests.get(GITHUB_RAW_JSON, timeout=10); r.raise_for_status()
+    r = requests.get(GITHUB_RAW_JSON, timeout=10)
+    r.raise_for_status()
     return r.json()
 
 def parse_date(s):
@@ -68,15 +68,18 @@ def parse_date(s):
     except:
         return None
 
-def show_image(path):
+def show_image(path, thumb=False):
+    """ thumb=True → fixed small width; else container_width """
     if path.startswith("http"):
-        st.image(path, use_container_width=True); return
+        st.image(path, width=100 if thumb else None, use_container_width=False if thumb else True)
+        return
     if os.path.exists(path):
-        st.image(path, use_container_width=True); return
+        st.image(path, width=100 if thumb else None, use_container_width=False if thumb else True)
+        return
     parts = path.replace("\\","/").split("/media/")
     if len(parts)==2:
         url = f"{GITHUB_RAW_MEDIA}/{parts[1]}"
-        st.image(url, use_container_width=True)
+        st.image(url, width=100 if thumb else None, use_container_width=False if thumb else True)
     else:
         st.write(f"🔗 {path}")
 
@@ -87,21 +90,7 @@ posts = load_posts()
 st.sidebar.title("🔍 Filters")
 q = st.sidebar.text_input("Keyword")
 
-# Date picker
-all_dates = [d for d in (parse_date(p["date"]) for p in posts) if d]
-mn = min(all_dates) if all_dates else date.today()
-mx = date.today()
-start, end = st.sidebar.date_input(
-    "Date range",
-    value=[mn, mx],
-    min_value=mn,
-    max_value=mx,
-)
-
-# Sort control
-sort_order = st.sidebar.selectbox("Sort by", ["Newest first","Oldest first"])
-
-# Load more / all
+# “Load more” & “Load all”
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
 c1, c2 = st.sidebar.columns(2)
@@ -110,45 +99,41 @@ if c1.button("Load more"):
 if c2.button("Load all"):
     st.session_state.count = len(posts)
 
-# ——— FILTERING ———
+# Date range picker
+dates = [d for d in (parse_date(p["date"]) for p in posts) if d]
+mn = min(dates) if dates else date.today()
+mx = date.today()
+start, end = st.sidebar.date_input("Date range", [mn, mx], min_value=mn, max_value=mx)
+
+# ——— FILTER & RANGE ———
 def matches(p):
     t = q.lower()
     if t and t in p.get("text","").lower(): return True
     return any(t in c.get("text","").lower() for c in p.get("comments",[]))
 
 filtered = [p for p in posts if (not q or matches(p))]
-
 def in_range(p):
     d = parse_date(p["date"])
     return d and (start <= d <= end)
-
 filtered = [p for p in filtered if in_range(p)]
 
-# ——— SORTING ———
-# parse_date fallback to date.min so None go first/last consistently
-filtered.sort(
-    key=lambda p: parse_date(p["date"]) or date.min,
-    reverse=(sort_order=="Newest first")
-)
-
-# ——— SMART GROUPING ———
-grouped_posts = []
+# ——— GROUP DUPLICATES ———
+grouped = {}
+order_keys = []
 for p in filtered:
-    author, date_s, text = p["author"], p["date"], p.get("text","").strip()
-    images, comments = p.get("images",[]), p.get("comments",[])
-    if text == "" and grouped_posts:
-        last = grouped_posts[-1]
-        if last["author"] == author and last["date"] == date_s:
-            last["images"].extend(images)
-            last["comments"].extend(comments)
-            continue
-    grouped_posts.append({
-        "author":   author,
-        "date":     date_s,
-        "text":     text,
-        "images":   images.copy(),
-        "comments": comments.copy()
-    })
+    key = (p["author"], p["date"], p.get("text",""))
+    is_empty_text = p.get("text","")==""  # only merge when this is True
+    if key not in grouped or not is_empty_text:
+        grouped[key] = {
+            "author":   key[0],
+            "date":     key[1],
+            "text":     p.get("text",""),
+            "images":   [],
+            "comments": p.get("comments",[]),
+        }
+        order_keys.append(key)
+    grouped[key]["images"].extend(p.get("images",[]))
+grouped_posts = [ grouped[k] for k in order_keys ]
 
 # ——— RENDER ———
 st.title("WP RETURNS GROUP – ARCHIVE")
@@ -161,12 +146,15 @@ for post in grouped_posts[: st.session_state.count]:
         st.markdown(f"### {post['author']}  ·  *{post['date']}*")
     with col2:
         st.write("")
+
     if post["text"]:
         st.write(post["text"])
     if post["images"]:
         cols = st.columns(len(post["images"]))
-        for c,img in zip(cols, post["images"]):
-            with c: show_image(img)
+        for c, img in zip(cols, post["images"]):
+            with c:
+                show_image(img, thumb=False)
+
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
             for c in post["comments"]:
@@ -176,13 +164,12 @@ for post in grouped_posts[: st.session_state.count]:
                 body = [L for L in lines if L not in tags]
                 txt = ("**" + " ".join(tags) + "** " if tags else "") + " ".join(body).strip()
                 st.write(txt)
+                # small thumbnails now
                 if c.get("images"):
                     thumbs = st.columns(len(c["images"]))
-                    for tc,im in zip(thumbs, c["images"]):
+                    for tc, im in zip(thumbs, c["images"]):
                         with tc:
-                            st.markdown('<div class="comment-image">', unsafe_allow_html=True)
-                            show_image(im)
-                            st.markdown('</div>', unsafe_allow_html=True)
+                            show_image(im, thumb=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ——— INFINITE SCROLL ———
@@ -203,5 +190,4 @@ components.html("""
     }
   </script>
 """, height=1)
-
 st.markdown("---")
