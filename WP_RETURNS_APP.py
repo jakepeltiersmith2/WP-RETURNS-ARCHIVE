@@ -15,7 +15,6 @@ st.markdown("""
       @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
       html, body, [class*="css"] { font-family: 'Roboto', sans-serif; }
 
-      /* Card wrapper */
       .post-card {
         background: #fff;
         padding: 1rem;
@@ -36,7 +35,6 @@ st.markdown("""
         margin-right: .5rem;
       }
 
-      /* Text sizing */
       h1 { font-size: 3rem !important; }
       h3 { font-size: 1.75rem !important; }
       p  { font-size: 1.25rem !important; line-height: 1.6 !important; }
@@ -49,139 +47,117 @@ st.markdown("""
 
 # ——— CONFIG ———
 PAGE_SIZE = 100
-
-# local vs GitHub raw paths
 LOCAL_JSON = os.path.join(os.path.dirname(__file__), "returns_posts.json")
-GITHUB_RAW = (
-    "https://raw.githubusercontent.com/"
-    "jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/returns_posts.json"
-)
+GITHUB_RAW_JSON = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/returns_posts.json"
+GITHUB_RAW_MEDIA = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/media"
 
-# ——— DATA LOADING ———
-@st.cache_data(show_spinner=False)
+@st.cache_data
 def load_posts():
-    # 1) try local file
     if os.path.exists(LOCAL_JSON):
-        with open(LOCAL_JSON, "r", encoding="utf-8") as f:
-            return json.load(f)
-    # 2) fallback to GitHub raw
-    resp = requests.get(GITHUB_RAW, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+        return json.load(open(LOCAL_JSON, "r", encoding="utf-8"))
+    r = requests.get(GITHUB_RAW_JSON, timeout=10); r.raise_for_status()
+    return r.json()
 
 posts = load_posts()
 
-# ——— SIDEBAR ———
 st.sidebar.title("🔍 Filters")
 q = st.sidebar.text_input("Search keyword")
-
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
-
-# hidden “Load more” button we’ll click via JS
-load_more = st.sidebar.button("Load more", key="__load_more__")
-if load_more:
+if st.sidebar.button("Load more"):
     st.session_state.count += PAGE_SIZE
 
-# ——— FILTERING ———
 def matches(post, term):
     t = term.lower()
-    if t in post.get("text", "").lower():
-        return True
-    return any(t in c.get("text", "").lower() for c in post.get("comments", []))
+    if t in post.get("text","").lower(): return True
+    return any(t in c.get("text","").lower() for c in post.get("comments",[]))
 
 filtered = [p for p in posts if matches(p, q)] if q else posts
 
-# ——— GROUP DUPLICATES ———
-grouped = {}
-order = []
+# group duplicate author+date together
+grouped, order = {}, []
 for p in filtered:
     key = (p["author"], p["date"])
     if key not in grouped:
-        grouped[key] = {
-            "author": key[0],
-            "date":   key[1],
-            "text":     p.get("text",""),
-            "images":   [],
-            "comments": p.get("comments", []),
-        }
+        grouped[key] = {"author":key[0],"date":key[1],"text":p.get("text",""),"images":[],"comments":p.get("comments",[])}
         order.append(key)
-    grouped[key]["images"].extend(p.get("images", []))
-
+    grouped[key]["images"].extend(p.get("images",[]))
 grouped_posts = [grouped[k] for k in order]
 
-# ——— HEADER ———
 st.title("WP RETURNS GROUP – ARCHIVE")
-st.markdown(
-    f"> Showing **{min(len(grouped_posts), st.session_state.count)}** of **{len(grouped_posts)}** posts"
-)
+st.markdown(f"> Showing **{min(len(grouped_posts), st.session_state.count)}** of **{len(grouped_posts)}** posts")
 
-# ——— MAIN DISPLAY ———
+def show_image(path):
+    # if it's a URL already, just pass it to st.image
+    if path.startswith("http"):
+        st.image(path, use_container_width=True); return
+    # local file?
+    if os.path.exists(path):
+        st.image(path, use_container_width=True); return
+    # fall back to GitHub raw
+    # strip out everything before the final /media/ folder:
+    parts = path.replace("\\","/").split("/media/")
+    if len(parts)==2:
+        rel = parts[1]
+        url = f"{GITHUB_RAW_MEDIA}/{rel}"
+        st.image(url, use_container_width=True)
+    else:
+        st.write(f"🔗 {path}")  # can't resolve
+
 for post in grouped_posts[: st.session_state.count]:
     st.markdown('<div class="post-card">', unsafe_allow_html=True)
-
-    col1, col2 = st.columns([3,1])
-    with col1:
+    c1, c2 = st.columns([3,1])
+    with c1:
         st.markdown(f"### {post['author']}  ·  *{post['date']}*")
-    with col2:
+    with c2:
         st.write("")
 
     if post["text"]:
         st.write(post["text"])
-
     if post["images"]:
-        img_cols = st.columns(len(post["images"]))
-        for c, img in zip(img_cols, post["images"]):
-            c.image(img, use_container_width=True)
+        cols = st.columns(len(post["images"]))
+        for col,img in zip(cols, post["images"]):
+            with col: show_image(img)
 
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
             for c in post["comments"]:
                 st.markdown(f"**{c['author']}**  ·  *{c['date']}*")
-                # merge tags + body
-                lines = c["text"].split("\n")
-                tags, body = [], []
+                # inline tags + body
+                lines = c["text"].split("\n"); tags, body = [], []
                 for L in lines:
                     if re.fullmatch(r"(?:[A-Z][a-z]+(?: [A-Z][a-z]+)*)", L):
                         tags.append(L)
                     else:
                         body.append(L)
-                tag_str = " ".join(tags)
-                body_str = " ".join(body).strip()
-                if tag_str:
-                    st.markdown(f"**{tag_str}** {body_str}")
-                else:
-                    st.write(body_str)
+                txt = ("**" + " ".join(tags) + "** " if tags else "") + " ".join(body).strip()
+                st.write(txt)
 
                 if c.get("images"):
                     thumbs = st.columns(len(c["images"]))
-                    for tc, im in zip(thumbs, c["images"]):
-                        tc.markdown('<div class="comment-image">', unsafe_allow_html=True)
-                        tc.image(im, use_container_width=True)
-                        tc.markdown('</div>', unsafe_allow_html=True)
+                    for tc,im in zip(thumbs, c["images"]):
+                        with tc:
+                            st.markdown('<div class="comment-image">', unsafe_allow_html=True)
+                            show_image(im)
+                            st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ——— INFINITE SCROLL ANCHOR ———
+# infinite-scroll “Load more” anchor
 components.html("""
-    <div id="scroll-anchor" style="height:1px; margin-top:-1px;"></div>
-    <script>
-      if (!window._infScroll_) {
-        window._infScroll_ = true;
-        const anchor = document.getElementById('scroll-anchor');
-        const obs = new IntersectionObserver(entries => {
-          if (entries[0].isIntersecting) {
-            const btns = window.parent.document.querySelectorAll("button");
-            for (const b of btns) {
-              if (b.innerText.trim() === "Load more") {
-                b.click();
-              }
-            }
-          }
-        }, { threshold: 1.0 });
-        obs.observe(anchor);
-      }
-    </script>
+  <div id="scroll-anchor" style="height:1px;margin-top:-1px;"></div>
+  <script>
+    if (!window._infScroll_) {
+      window._infScroll_ = true;
+      const anchor = document.getElementById('scroll-anchor');
+      new IntersectionObserver(e=>{
+        if(e[0].isIntersecting){
+          const btns = window.parent.document.querySelectorAll("button");
+          btns.forEach(b=> b.innerText.trim()==="Load more" && b.click());
+        }
+      },{threshold:1.0}).observe(anchor);
+    }
+  </script>
 """, height=1)
 
 st.markdown("---")
