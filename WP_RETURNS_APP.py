@@ -1,6 +1,8 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import json, os, re, requests
+from datetime import date
+from dateutil import parser
 
 # ——— PAGE CONFIG ———
 st.set_page_config(
@@ -28,9 +30,8 @@ st.markdown("""
         border-radius: 4px;
         margin-bottom: .75rem;
       }
-      /* shrink comment thumbnails to 80px */
       .comment-image img {
-        max-width: 80px !important;
+        max-width: 120px !important;
         height: auto !important;
         border-radius: 4px;
         margin-right: .5rem;
@@ -47,75 +48,103 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ——— CONFIG ———
-PAGE_SIZE = 100
-LOCAL_JSON = os.path.join(os.path.dirname(__file__), "returns_posts.json")
+PAGE_SIZE       = 100
+LOCAL_JSON      = os.path.join(os.path.dirname(__file__), "returns_posts.json")
 GITHUB_RAW_JSON = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/returns_posts.json"
-GITHUB_RAW_MEDIA = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/media"
+GITHUB_RAW_MEDIA= "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/media"
 
 @st.cache_data
 def load_posts():
+    # load from local if exists, else from GitHub
     if os.path.exists(LOCAL_JSON):
-        return json.load(open(LOCAL_JSON, "r", encoding="utf-8"))
-    r = requests.get(GITHUB_RAW_JSON, timeout=10); r.raise_for_status()
-    return r.json()
+        posts = json.load(open(LOCAL_JSON, "r", encoding="utf-8"))
+    else:
+        r = requests.get(GITHUB_RAW_JSON, timeout=10); r.raise_for_status()
+        posts = r.json()
+
+    # parse dates once
+    for p in posts:
+        try:
+            # assumes format like "31 January 2022" (or with time)
+            p["_date_dt"] = parser.parse(p["date"], dayfirst=True).date()
+        except Exception:
+            p["_date_dt"] = None
+    return posts
 
 posts = load_posts()
 
-# ——— SIDEBAR ———
+# ——— SIDEBAR FILTERS ———
 st.sidebar.title("🔍 Filters")
+
+# 1) keyword
 q = st.sidebar.text_input("Search keyword")
 
-# sort control
-sort_order = st.sidebar.selectbox("Sort order", ["Newest first", "Oldest first"])
+# 2) date range
+all_dates = [p["_date_dt"] for p in posts if p["_date_dt"]]
+if all_dates:
+    min_date, max_date = min(all_dates), max(all_dates)
+else:
+    min_date = max_date = date.today()
+start_date, end_date = st.sidebar.date_input(
+    "Date range",
+    value=(min_date, max_date),
+    min_value=min_date,
+    max_value=max_date
+)
 
-# load-more
+# pagination
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
 if st.sidebar.button("Load more"):
     st.session_state.count += PAGE_SIZE
 
-def matches(post, term):
-    t = term.lower()
-    if t in post.get("text","").lower(): return True
-    return any(t in c.get("text","").lower() for c in post.get("comments",[]))
+# ——— FILTERING ———
+def matches(p, term, start, end):
+    # date filter
+    dt = p.get("_date_dt")
+    if dt is None or not (start <= dt <= end):
+        return False
+    # keyword filter
+    if term and term.lower() not in p.get("text", "").lower():
+        # also search within comments
+        return any(term.lower() in c.get("text","").lower() for c in p.get("comments", []))
+    return True
 
-filtered = [p for p in posts if matches(p, q)] if q else posts
+filtered = [p for p in posts if matches(p, q, start_date, end_date)]
 
-# group duplicate author+date together
+# ——— GROUP DUPLICATES BY (AUTHOR, DATE) ———
 grouped, order = {}, []
 for p in filtered:
     key = (p["author"], p["date"])
     if key not in grouped:
         grouped[key] = {
-            "author":   key[0],
-            "date":     key[1],
-            "text":     p.get("text",""),
-            "images":   [],
-            "comments": p.get("comments",[]),
+            "author": key[0],
+            "date":   key[1],
+            "text":   p.get("text",""),
+            "images": [],
+            "comments": p.get("comments",[])
         }
         order.append(key)
     grouped[key]["images"].extend(p.get("images",[]))
-grouped_posts = [grouped[k] for k in order]
 
-# apply sort
-if sort_order == "Oldest first":
-    grouped_posts = list(reversed(grouped_posts))
+grouped_posts = [ grouped[k] for k in order ]
 
 # ——— HEADER ———
 st.title("WP RETURNS GROUP – ARCHIVE")
-st.markdown(f"> Showing **{min(len(grouped_posts), st.session_state.count)}** of **{len(grouped_posts)}** posts — *{sort_order}*")
+st.markdown(
+    f"> Showing **{min(len(grouped_posts), st.session_state.count)}**"
+    f" of **{len(grouped_posts)}** posts"
+)
 
+# helper to display an image path
 def show_image(path):
     if path.startswith("http"):
-        st.image(path, use_container_width=True)
-        return
+        st.image(path, use_container_width=True); return
     if os.path.exists(path):
-        st.image(path, use_container_width=True)
-        return
+        st.image(path, use_container_width=True); return
     parts = path.replace("\\","/").split("/media/")
     if len(parts)==2:
-        rel = parts[1]
-        url = f"{GITHUB_RAW_MEDIA}/{rel}"
+        url = f"{GITHUB_RAW_MEDIA}/{parts[1]}"
         st.image(url, use_container_width=True)
     else:
         st.write(f"🔗 {path}")
@@ -133,9 +162,8 @@ for post in grouped_posts[: st.session_state.count]:
         st.write(post["text"])
     if post["images"]:
         cols = st.columns(len(post["images"]))
-        for col, img in zip(cols, post["images"]):
-            with col:
-                show_image(img)
+        for col,img in zip(cols, post["images"]):
+            with col: show_image(img)
 
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
@@ -149,10 +177,9 @@ for post in grouped_posts[: st.session_state.count]:
                         body.append(L)
                 txt = ("**" + " ".join(tags) + "** " if tags else "") + " ".join(body).strip()
                 st.write(txt)
-
                 if c.get("images"):
                     thumbs = st.columns(len(c["images"]))
-                    for tc, im in zip(thumbs, c["images"]):
+                    for tc,im in zip(thumbs, c["images"]):
                         with tc:
                             st.markdown('<div class="comment-image">', unsafe_allow_html=True)
                             show_image(im)
@@ -166,14 +193,15 @@ components.html("""
   <script>
     if (!window._infScroll_) {
       window._infScroll_ = true;
-      const anchor = document.getElementById('scroll-anchor');
       new IntersectionObserver(e=>{
         if(e[0].isIntersecting){
           document.querySelectorAll("button").forEach(b=>{
             if(b.innerText.trim()==="Load more") b.click();
           });
         }
-      },{threshold:1.0}).observe(anchor);
+      },{threshold:1.0}).observe(
+        document.getElementById('scroll-anchor')
+      );
     }
   </script>
 """, height=1)
