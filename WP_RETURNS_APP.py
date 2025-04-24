@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import json, os, re, requests
-from datetime import datetime, date
+from datetime import date
 from dateutil import parser
 
 # ——— PAGE CONFIG ———
@@ -16,33 +16,19 @@ st.markdown("""
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
       html, body, [class*="css"] { font-family: 'Roboto', sans-serif; }
-
-      .post-card {
-        background: #fff;
-        padding: 1rem;
-        margin-bottom: 1.5rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-      }
-      .post-card img {
-        max-width: 70% !important;
-        height: auto !important;
-        border-radius: 4px;
-        margin-bottom: .75rem;
-      }
-      .comment-image img {
-        max-width: 120px !important;
-        height: auto !important;
-        border-radius: 4px;
-        margin-right: .5rem;
-      }
-      h1 { font-size: 3rem !important; }
-      h3 { font-size: 1.75rem !important; }
-      p  { font-size: 1.25rem !important; line-height: 1.6 !important; }
-      .streamlit-expanderHeader { font-size: 1.4rem !important; font-weight: 500 !important; }
-      .stTextInput input { font-size: 1.1rem !important; }
-      .streamlit-expanderContent > div { margin-bottom: 1rem; }
-      .block-container { padding-top: 1rem; }
+      .post-card { background: #fff; padding:1rem; margin-bottom:1.5rem;
+                   border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
+      .post-card img { max-width:70% !important; height:auto !important;
+                       border-radius:4px; margin-bottom:.75rem; }
+      .comment-image img { max-width:120px !important; height:auto !important;
+                           border-radius:4px; margin-right:.5rem; }
+      h1 { font-size:3rem !important; }
+      h3 { font-size:1.75rem !important; }
+      p  { font-size:1.25rem !important; line-height:1.6 !important; }
+      .streamlit-expanderHeader { font-size:1.4rem !important; font-weight:500 !important; }
+      .stTextInput input { font-size:1.1rem !important; }
+      .streamlit-expanderContent > div { margin-bottom:1rem; }
+      .block-container { padding-top:1rem; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -62,7 +48,6 @@ def load_posts():
     return r.json()
 
 def parse_date(s):
-    """Attempt to parse a date string like '31 January 2022'. Falls back to today."""
     try:
         return parser.parse(s, dayfirst=True).date()
     except:
@@ -70,15 +55,12 @@ def parse_date(s):
 
 def show_image(path):
     if path.startswith("http"):
-        st.image(path, use_container_width=True)
-        return
+        st.image(path, use_container_width=True); return
     if os.path.exists(path):
-        st.image(path, use_container_width=True)
-        return
+        st.image(path, use_container_width=True); return
     parts = path.replace("\\","/").split("/media/")
     if len(parts)==2:
-        rel = parts[1]
-        url = f"{GITHUB_RAW_MEDIA}/{rel}"
+        url = f"{GITHUB_RAW_MEDIA}/{parts[1]}"
         st.image(url, use_container_width=True)
     else:
         st.write(f"🔗 {path}")
@@ -86,64 +68,58 @@ def show_image(path):
 # ——— LOAD DATA ———
 posts = load_posts()
 
-# ——— SIDEBAR CONTROLS ———
+# ——— SIDEBAR FILTERS ———
 st.sidebar.title("🔍 Filters")
-
 q = st.sidebar.text_input("Keyword")
-# date-range picker
-all_dates = [parse_date(p["date"]) for p in posts]
-min_d = min([d for d in all_dates if d])+ (date.today() - date.today())  if any(all_dates) else date.today()
-max_d = max([d for d in all_dates if d])+ (date.today() - date.today())  if any(all_dates) else date.today()
-start, end = st.sidebar.date_input("Date range", [min_d, max_d])
 
-# sort order
-order = st.sidebar.radio("Sort by", ["Newest first", "Oldest first"])
+# date range inputs
+dates = [parse_date(p["date"]) for p in posts if parse_date(p["date"])]
+if dates:
+    mn, mx = min(dates), max(dates)
+else:
+    mn = mx = date.today()
+start, end = st.sidebar.date_input("Date range", [mn, mx])
 
-# how many posts?
+# how many to show?
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
-
-# two buttons side by side
-b1, b2 = st.sidebar.columns(2)
-if b1.button("Load more"):
+c1, c2 = st.sidebar.columns(2)
+if c1.button("Load more"):
     st.session_state.count += PAGE_SIZE
-if b2.button("Load all"):
+if c2.button("Load all"):
     st.session_state.count = len(posts)
 
-# ——— FILTER & SORT POSTS ———
+# ——— FILTER ONLY ———
 def matches(p):
     t = q.lower()
     if t and t in p.get("text","").lower(): return True
     return any(t in c.get("text","").lower() for c in p.get("comments",[]))
 
 filtered = [p for p in posts if (not q or matches(p))]
-# date filter
+# apply date filter
 def in_range(p):
     d = parse_date(p["date"])
-    return d and start <= d <= end
+    return d and (start <= d <= end)
 filtered = [p for p in filtered if in_range(p)]
 
-# sort
-filtered.sort(
-    key=lambda p: parse_date(p["date"]) or date.min,
-    reverse = (order=="Newest first")
-)
+# preserve original JSON order (newest first by default)
+# — no further sorting —
 
-# group duplicates (author, date)
+# ——— GROUP DUPLICATES ———
 grouped = {}
 order_keys = []
 for p in filtered:
-    k = (p["author"], p["date"])
-    if k not in grouped:
-        grouped[k] = {
-            "author": k[0],
-            "date":   k[1],
-            "text":   p.get("text",""),
-            "images": [],
+    key = (p["author"], p["date"])
+    if key not in grouped:
+        grouped[key] = {
+            "author":   key[0],
+            "date":     key[1],
+            "text":     p.get("text",""),
+            "images":   [],
             "comments": p.get("comments",[]),
         }
-        order_keys.append(k)
-    grouped[k]["images"].extend(p.get("images",[]))
+        order_keys.append(key)
+    grouped[key]["images"].extend(p.get("images",[]))
 grouped_posts = [ grouped[k] for k in order_keys ]
 
 # ——— RENDER ———
@@ -152,31 +128,24 @@ st.markdown(f"> Showing **{min(len(grouped_posts), st.session_state.count)}** of
 
 for post in grouped_posts[: st.session_state.count]:
     st.markdown('<div class="post-card">', unsafe_allow_html=True)
-
-    # header
-    c1, c2 = st.columns([3,1])
-    with c1:
+    col1, col2 = st.columns([3,1])
+    with col1:
         st.markdown(f"### {post['author']}  ·  *{post['date']}*")
-    with c2:
+    with col2:
         st.write("")
 
-    # body
     if post["text"]:
         st.write(post["text"])
-
-    # images
     if post["images"]:
         cols = st.columns(len(post["images"]))
-        for col,img in zip(cols, post["images"]):
-            with col:
+        for c, img in zip(cols, post["images"]):
+            with c:
                 show_image(img)
 
-    # comments
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
             for c in post["comments"]:
                 st.markdown(f"**{c['author']}**  ·  *{c['date']}*")
-                # inline tags + body
                 lines = c["text"].split("\n")
                 tags = [L for L in lines if re.fullmatch(r"(?:[A-Z][a-z]+(?: [A-Z][a-z]+)*)", L)]
                 body = [L for L in lines if L not in tags]
@@ -189,10 +158,9 @@ for post in grouped_posts[: st.session_state.count]:
                             st.markdown('<div class="comment-image">', unsafe_allow_html=True)
                             show_image(im)
                             st.markdown('</div>', unsafe_allow_html=True)
-
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ——— INFINITE SCROLL “Load more” ———
+# ——— INFINITE SCROLL ———
 components.html("""
   <div id="scroll-anchor" style="height:1px;margin-top:-1px;"></div>
   <script>
@@ -201,7 +169,7 @@ components.html("""
       new IntersectionObserver(e => {
         if (e[0].isIntersecting) {
           Array.from(window.parent.document.querySelectorAll("button"))
-               .filter(b => b.innerText.trim()==="Load more")
+               .filter(b=>b.innerText.trim()==="Load more")
                .forEach(b=>b.click());
         }
       },{threshold:1.0}).observe(
