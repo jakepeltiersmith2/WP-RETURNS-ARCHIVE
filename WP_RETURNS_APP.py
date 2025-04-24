@@ -29,7 +29,7 @@ st.markdown("""
         margin-bottom: .75rem;
       }
       .comment-image img {
-        max-width: 120px !important;
+        max-width: 80px !important;
         height: auto !important;
         border-radius: 4px;
         margin-right: .5rem;
