@@ -68,26 +68,25 @@ def show_image(path):
 # ——— LOAD DATA ———
 posts = load_posts()
 
-# ——— SIDEBAR FILTERS ———
+# ——— SIDEBAR ———
 st.sidebar.title("🔍 Filters")
 q = st.sidebar.text_input("Keyword")
 
-# build list of parseable dates
+# date‐picker range
 all_dates = [d for d in (parse_date(p["date"]) for p in posts) if d]
-if all_dates:
-    mn = min(all_dates)
-else:
-    mn = date.today()
-default_end = date.today()
-
+mn = min(all_dates) if all_dates else date.today()
+mx = date.today()
 start, end = st.sidebar.date_input(
     "Date range",
-    value=[mn, default_end],
+    value=[mn, mx],
     min_value=mn,
-    max_value=default_end,
+    max_value=mx,
 )
 
-# “Load more” & “Load all”
+# sort order
+sort_order = st.sidebar.selectbox("Sort by", ["Newest first", "Oldest first"])
+
+# Load more / all
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
 c1, c2 = st.sidebar.columns(2)
@@ -123,11 +122,16 @@ for p in filtered:
         }
         order_keys.append(key)
     grouped[key]["images"].extend(p.get("images",[]))
-grouped_posts = [ grouped[k] for k in order_keys ]
+grouped_posts = [grouped[k] for k in order_keys]
+
+# ——— APPLY SORT ———
+# posts.json is naturally newest-first; reverse if needed
+if sort_order == "Oldest first":
+    grouped_posts = list(reversed(grouped_posts))
 
 # ——— RENDER ———
 st.title("WP RETURNS GROUP – ARCHIVE")
-st.markdown(f"> Showing **{min(len(grouped_posts), st.session_state.count)}** of **{len(grouped_posts)}** posts")
+st.markdown(f"> Showing **{min(len(grouped_posts), st.session_state.count)}** of **{len(grouped_posts)}** posts  •  Sorted: **{sort_order}**")
 
 for post in grouped_posts[: st.session_state.count]:
     st.markdown('<div class="post-card">', unsafe_allow_html=True)
