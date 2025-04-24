@@ -72,15 +72,22 @@ posts = load_posts()
 st.sidebar.title("🔍 Filters")
 q = st.sidebar.text_input("Keyword")
 
-# date range inputs
-dates = [parse_date(p["date"]) for p in posts if parse_date(p["date"])]
-if dates:
-    mn, mx = min(dates), max(dates)
+# build list of parseable dates
+all_dates = [d for d in (parse_date(p["date"]) for p in posts) if d]
+if all_dates:
+    mn = min(all_dates)
 else:
-    mn = mx = date.today()
-start, end = st.sidebar.date_input("Date range", [mn, mx])
+    mn = date.today()
+default_end = date.today()
 
-# how many to show?
+start, end = st.sidebar.date_input(
+    "Date range",
+    value=[mn, default_end],
+    min_value=mn,
+    max_value=default_end,
+)
+
+# “Load more” & “Load all”
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
 c1, c2 = st.sidebar.columns(2)
@@ -89,21 +96,17 @@ if c1.button("Load more"):
 if c2.button("Load all"):
     st.session_state.count = len(posts)
 
-# ——— FILTER ONLY ———
+# ——— FILTER & RANGE ———
 def matches(p):
     t = q.lower()
     if t and t in p.get("text","").lower(): return True
     return any(t in c.get("text","").lower() for c in p.get("comments",[]))
 
 filtered = [p for p in posts if (not q or matches(p))]
-# apply date filter
 def in_range(p):
     d = parse_date(p["date"])
     return d and (start <= d <= end)
 filtered = [p for p in filtered if in_range(p)]
-
-# preserve original JSON order (newest first by default)
-# — no further sorting —
 
 # ——— GROUP DUPLICATES ———
 grouped = {}
