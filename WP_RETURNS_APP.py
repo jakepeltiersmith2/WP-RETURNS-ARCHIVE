@@ -1,6 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import json, os, re
+import json, os, re, requests
 
 # ——— PAGE CONFIG ———
 st.set_page_config(
@@ -10,8 +10,7 @@ st.set_page_config(
 )
 
 # ——— GLOBAL STYLES ———
-st.markdown(
-    """
+st.markdown("""
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
       html, body, [class*="css"] { font-family: 'Roboto', sans-serif; }
@@ -46,24 +45,31 @@ st.markdown(
       .streamlit-expanderContent > div { margin-bottom: 1rem; }
       .block-container { padding-top: 1rem; }
     </style>
-    """,
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
 # ——— CONFIG ———
-DATA_PATH = r"\\sbi-srv-10\GeneralShares\Company\Systems\RETURNS ARCHIVE\returns_posts.json"
 PAGE_SIZE = 100
+
+# local vs GitHub raw paths
+LOCAL_JSON = os.path.join(os.path.dirname(__file__), "returns_posts.json")
+GITHUB_RAW = (
+    "https://raw.githubusercontent.com/"
+    "jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/returns_posts.json"
+)
 
 # ——— DATA LOADING ———
 @st.cache_data(show_spinner=False)
-def load_posts(path):
-    if not os.path.exists(path):
-        st.error(f"Data file not found: {path}")
-        return []
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+def load_posts():
+    # 1) try local file
+    if os.path.exists(LOCAL_JSON):
+        with open(LOCAL_JSON, "r", encoding="utf-8") as f:
+            return json.load(f)
+    # 2) fallback to GitHub raw
+    resp = requests.get(GITHUB_RAW, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
 
-posts = load_posts(DATA_PATH)
+posts = load_posts()
 
 # ——— SIDEBAR ———
 st.sidebar.title("🔍 Filters")
@@ -72,7 +78,7 @@ q = st.sidebar.text_input("Search keyword")
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
 
-# a hidden “Load more” button we’ll click via JS
+# hidden “Load more” button we’ll click via JS
 load_more = st.sidebar.button("Load more", key="__load_more__")
 if load_more:
     st.session_state.count += PAGE_SIZE
@@ -80,9 +86,9 @@ if load_more:
 # ——— FILTERING ———
 def matches(post, term):
     t = term.lower()
-    if t in post["text"].lower():
+    if t in post.get("text", "").lower():
         return True
-    return any(t in c["text"].lower() for c in post["comments"])
+    return any(t in c.get("text", "").lower() for c in post.get("comments", []))
 
 filtered = [p for p in posts if matches(p, q)] if q else posts
 
@@ -93,14 +99,15 @@ for p in filtered:
     key = (p["author"], p["date"])
     if key not in grouped:
         grouped[key] = {
-            "author":   p["author"],
-            "date":     p["date"],
-            "text":     p["text"],
+            "author": key[0],
+            "date":   key[1],
+            "text":     p.get("text",""),
             "images":   [],
-            "comments": p["comments"],
+            "comments": p.get("comments", []),
         }
         order.append(key)
-    grouped[key]["images"].extend(p["images"])
+    grouped[key]["images"].extend(p.get("images", []))
+
 grouped_posts = [grouped[k] for k in order]
 
 # ——— HEADER ———
@@ -130,7 +137,6 @@ for post in grouped_posts[: st.session_state.count]:
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
             for c in post["comments"]:
-                # author & date on one line
                 st.markdown(f"**{c['author']}**  ·  *{c['date']}*")
                 # merge tags + body
                 lines = c["text"].split("\n")
@@ -147,7 +153,7 @@ for post in grouped_posts[: st.session_state.count]:
                 else:
                     st.write(body_str)
 
-                if c["images"]:
+                if c.get("images"):
                     thumbs = st.columns(len(c["images"]))
                     for tc, im in zip(thumbs, c["images"]):
                         tc.markdown('<div class="comment-image">', unsafe_allow_html=True)
@@ -157,8 +163,7 @@ for post in grouped_posts[: st.session_state.count]:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ——— INFINITE SCROLL ANCHOR ———
-components.html(
-    """
+components.html("""
     <div id="scroll-anchor" style="height:1px; margin-top:-1px;"></div>
     <script>
       if (!window._infScroll_) {
@@ -177,8 +182,6 @@ components.html(
         obs.observe(anchor);
       }
     </script>
-    """,
-    height=1,
-)
+""", height=1)
 
 st.markdown("---")
