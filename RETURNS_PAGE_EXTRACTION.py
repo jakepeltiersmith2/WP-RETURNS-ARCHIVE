@@ -29,8 +29,8 @@ MEDIA_ROOT    = os.path.join(OUTPUT_DIR, "media")
 COOKIES_FILE  = os.path.join(OUTPUT_DIR, "cookies.pkl")
 OUTPUT_JSON   = os.path.join(OUTPUT_DIR, "returns_posts.json")
 
-EMAIL       = "jake@sbinteriors.co.uk"
-PASSWORD    = "Megmilo2021!"
+EMAIL       = ""
+PASSWORD    = ""
 MAX_SCROLLS = 350
 # ===================================
 
