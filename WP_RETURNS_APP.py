@@ -87,19 +87,21 @@ posts = load_posts()
 st.sidebar.title("🔍 Filters")
 q = st.sidebar.text_input("Keyword")
 
-# build list of parseable dates
+# Date picker
 all_dates = [d for d in (parse_date(p["date"]) for p in posts) if d]
 mn = min(all_dates) if all_dates else date.today()
-default_end = date.today()
-
+mx = date.today()
 start, end = st.sidebar.date_input(
     "Date range",
-    value=[mn, default_end],
+    value=[mn, mx],
     min_value=mn,
-    max_value=default_end,
+    max_value=mx,
 )
 
-# “Load more” & “Load all”
+# Sort control
+sort_order = st.sidebar.selectbox("Sort by", ["Newest first","Oldest first"])
+
+# Load more / all
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
 c1, c2 = st.sidebar.columns(2)
@@ -108,7 +110,7 @@ if c1.button("Load more"):
 if c2.button("Load all"):
     st.session_state.count = len(posts)
 
-# ——— FILTER & RANGE ———
+# ——— FILTERING ———
 def matches(p):
     t = q.lower()
     if t and t in p.get("text","").lower(): return True
@@ -122,19 +124,24 @@ def in_range(p):
 
 filtered = [p for p in filtered if in_range(p)]
 
+# ——— SORTING ———
+# parse_date fallback to date.min so None go first/last consistently
+filtered.sort(
+    key=lambda p: parse_date(p["date"]) or date.min,
+    reverse=(sort_order=="Newest first")
+)
+
 # ——— SMART GROUPING ———
 grouped_posts = []
 for p in filtered:
     author, date_s, text = p["author"], p["date"], p.get("text","").strip()
     images, comments = p.get("images",[]), p.get("comments",[])
     if text == "" and grouped_posts:
-        # only append blanks to previous if same author/date
         last = grouped_posts[-1]
         if last["author"] == author and last["date"] == date_s:
             last["images"].extend(images)
             last["comments"].extend(comments)
             continue
-    # otherwise start a brand-new card
     grouped_posts.append({
         "author":   author,
         "date":     date_s,
