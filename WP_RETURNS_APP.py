@@ -49,7 +49,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ——— CONFIG ———
-PAGE_SIZE        = 100
+PAGE_SIZE        = 50
 LOCAL_JSON       = os.path.join(os.path.dirname(__file__), "returns_posts.json")
 GITHUB_RAW_JSON  = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/returns_posts.json"
 GITHUB_RAW_MEDIA = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/media"
@@ -125,23 +125,27 @@ def in_range(p):
 filtered = [p for p in filtered if in_range(p)]
 
 # ——— SORTING ———
-# parse_date fallback to date.min so None go first/last consistently
 filtered.sort(
     key=lambda p: parse_date(p["date"]) or date.min,
     reverse=(sort_order=="Newest first")
 )
 
-# ——— SMART GROUPING ———
+# ——— SMART GROUPING (preserve all non-blank text) ———
 grouped_posts = []
 for p in filtered:
     author, date_s, text = p["author"], p["date"], p.get("text","").strip()
     images, comments = p.get("images",[]), p.get("comments",[])
-    if text == "" and grouped_posts:
+    if grouped_posts:
         last = grouped_posts[-1]
         if last["author"] == author and last["date"] == date_s:
+            # always merge images & comments
             last["images"].extend(images)
             last["comments"].extend(comments)
+            # if this post has its own text, append it too
+            if text:
+                last["text"] = f"{last['text']}\n\n{text}"
             continue
+    # otherwise start a new card
     grouped_posts.append({
         "author":   author,
         "date":     date_s,
