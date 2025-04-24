@@ -98,7 +98,7 @@ for p in filtered:
 grouped_posts = [grouped[k] for k in order]
 
 # apply sort
-if sort_order == "Newest first":
+if sort_order == "Oldest first":
     grouped_posts = list(reversed(grouped_posts))
 
 # ——— HEADER ———
