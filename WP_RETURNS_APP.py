@@ -44,28 +44,36 @@ st.markdown("""
       .stTextInput input { font-size: 1.1rem !important; }
       .streamlit-expanderContent > div { margin-bottom: 1rem; }
       .block-container { padding-top: 1rem; }
+      .sidebar-button-row > div { display: inline-block; margin-right: 0.5rem; }
     </style>
 """, unsafe_allow_html=True)
 
 # ——— CONFIG ———
-PAGE_SIZE       = 100
+PAGE_SIZE       = 50
 LOCAL_JSON      = os.path.join(os.path.dirname(__file__), "returns_posts.json")
-GITHUB_RAW_JSON = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/returns_posts.json"
-GITHUB_RAW_MEDIA= "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/media"
+GITHUB_RAW_JSON = (
+    "https://raw.githubusercontent.com/jakepeltiersmith2/"
+    "WP-RETURNS-ARCHIVE/main/returns_posts.json"
+)
+GITHUB_RAW_MEDIA= (
+    "https://raw.githubusercontent.com/jakepeltiersmith2/"
+    "WP-RETURNS-ARCHIVE/main/media"
+)
 
 @st.cache_data
 def load_posts():
-    # load from local if exists, else from GitHub
+    # load local if present, else from GitHub
     if os.path.exists(LOCAL_JSON):
         posts = json.load(open(LOCAL_JSON, "r", encoding="utf-8"))
     else:
-        r = requests.get(GITHUB_RAW_JSON, timeout=10); r.raise_for_status()
+        r = requests.get(GITHUB_RAW_JSON, timeout=10)
+        r.raise_for_status()
         posts = r.json()
 
-    # parse dates once
+    # parse each post date into a date object
     for p in posts:
         try:
-            # assumes format like "31 January 2022" (or with time)
+            # handles "31 January 2022" or "31 January at 14:32"
             p["_date_dt"] = parser.parse(p["date"], dayfirst=True).date()
         except Exception:
             p["_date_dt"] = None
@@ -76,43 +84,69 @@ posts = load_posts()
 # ——— SIDEBAR FILTERS ———
 st.sidebar.title("🔍 Filters")
 
-# 1) keyword
+# keyword search
 q = st.sidebar.text_input("Search keyword")
 
-# 2) date range
-all_dates = [p["_date_dt"] for p in posts if p["_date_dt"]]
-if all_dates:
-    min_date, max_date = min(all_dates), max(all_dates)
+# date range picker
+dates = [p["_date_dt"] for p in posts if p["_date_dt"]]
+if dates:
+    ds, de = min(dates), max(dates)
 else:
-    min_date = max_date = date.today()
+    ds = de = date.today()
+
 start_date, end_date = st.sidebar.date_input(
     "Date range",
-    value=(min_date, max_date),
-    min_value=min_date,
-    max_value=max_date
+    value=(ds, de),
+    min_value=ds,
+    max_value=de
 )
 
-# pagination
+# sort order
+sort_order = st.sidebar.radio(
+    "Sort by",
+    ("Newest first", "Oldest first")
+)
+
+# pagination controls
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
-if st.sidebar.button("Load more"):
-    st.session_state.count += PAGE_SIZE
 
-# ——— FILTERING ———
-def matches(p, term, start, end):
+# place buttons side by side
+b1, b2 = st.sidebar.beta_columns(2)
+with b1:
+    load_more = st.button("Load more")
+with b2:
+    load_all = st.button("Load all")
+
+if load_more:
+    st.session_state.count += PAGE_SIZE
+if load_all:
+    st.session_state.count = len(posts)
+
+# ——— FILTER & SORT ———
+def matches(p):
     # date filter
     dt = p.get("_date_dt")
-    if dt is None or not (start <= dt <= end):
+    if dt is None or not (start_date <= dt <= end_date):
         return False
     # keyword filter
-    if term and term.lower() not in p.get("text", "").lower():
-        # also search within comments
-        return any(term.lower() in c.get("text","").lower() for c in p.get("comments", []))
+    if q:
+        text = p.get("text","").lower()
+        if q.lower() in text:
+            return True
+        for c in p.get("comments",[]):
+            if q.lower() in c.get("text","").lower():
+                return True
+        return False
     return True
 
-filtered = [p for p in posts if matches(p, q, start_date, end_date)]
+filtered = [p for p in posts if matches(p)]
 
-# ——— GROUP DUPLICATES BY (AUTHOR, DATE) ———
+# sort by date_dt
+filtered.sort(key=lambda p: p["_date_dt"] or date.min,
+              reverse=(sort_order=="Newest first"))
+
+# ——— GROUP DUPLICATES ———
 grouped, order = {}, []
 for p in filtered:
     key = (p["author"], p["date"])
@@ -136,12 +170,14 @@ st.markdown(
     f" of **{len(grouped_posts)}** posts"
 )
 
-# helper to display an image path
+# helper to display image (local or GitHub raw)
 def show_image(path):
     if path.startswith("http"):
-        st.image(path, use_container_width=True); return
+        st.image(path, use_container_width=True)
+        return
     if os.path.exists(path):
-        st.image(path, use_container_width=True); return
+        st.image(path, use_container_width=True)
+        return
     parts = path.replace("\\","/").split("/media/")
     if len(parts)==2:
         url = f"{GITHUB_RAW_MEDIA}/{parts[1]}"
@@ -163,7 +199,8 @@ for post in grouped_posts[: st.session_state.count]:
     if post["images"]:
         cols = st.columns(len(post["images"]))
         for col,img in zip(cols, post["images"]):
-            with col: show_image(img)
+            with col:
+                show_image(img)
 
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
