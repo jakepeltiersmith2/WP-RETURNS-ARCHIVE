@@ -61,8 +61,14 @@ def load_posts():
 
 posts = load_posts()
 
+# ——— SIDEBAR ———
 st.sidebar.title("🔍 Filters")
 q = st.sidebar.text_input("Search keyword")
+
+# sort control
+sort_order = st.sidebar.selectbox("Sort order", ["Newest first", "Oldest first"])
+
+# load-more
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
 if st.sidebar.button("Load more"):
@@ -81,18 +87,23 @@ for p in filtered:
     key = (p["author"], p["date"])
     if key not in grouped:
         grouped[key] = {
-            "author": key[0],
-            "date":   key[1],
-            "text":   p.get("text",""),
-            "images": [],
+            "author":   key[0],
+            "date":     key[1],
+            "text":     p.get("text",""),
+            "images":   [],
             "comments": p.get("comments",[]),
         }
         order.append(key)
     grouped[key]["images"].extend(p.get("images",[]))
 grouped_posts = [grouped[k] for k in order]
 
+# apply sort
+if sort_order == "Newest first":
+    grouped_posts = list(reversed(grouped_posts))
+
+# ——— HEADER ———
 st.title("WP RETURNS GROUP – ARCHIVE")
-st.markdown(f"> Showing **{min(len(grouped_posts), st.session_state.count)}** of **{len(grouped_posts)}** posts")
+st.markdown(f"> Showing **{min(len(grouped_posts), st.session_state.count)}** of **{len(grouped_posts)}** posts — *{sort_order}*")
 
 def show_image(path):
     if path.startswith("http"):
@@ -122,7 +133,7 @@ for post in grouped_posts[: st.session_state.count]:
         st.write(post["text"])
     if post["images"]:
         cols = st.columns(len(post["images"]))
-        for col,img in zip(cols, post["images"]):
+        for col, img in zip(cols, post["images"]):
             with col:
                 show_image(img)
 
@@ -141,7 +152,7 @@ for post in grouped_posts[: st.session_state.count]:
 
                 if c.get("images"):
                     thumbs = st.columns(len(c["images"]))
-                    for tc,im in zip(thumbs, c["images"]):
+                    for tc, im in zip(thumbs, c["images"]):
                         with tc:
                             st.markdown('<div class="comment-image">', unsafe_allow_html=True)
                             show_image(im)
@@ -158,8 +169,9 @@ components.html("""
       const anchor = document.getElementById('scroll-anchor');
       new IntersectionObserver(e=>{
         if(e[0].isIntersecting){
-          const btns = window.parent.document.querySelectorAll("button");
-          btns.forEach(b=> b.innerText.trim()==="Load more" && b.click());
+          document.querySelectorAll("button").forEach(b=>{
+            if(b.innerText.trim()==="Load more") b.click();
+          });
         }
       },{threshold:1.0}).observe(anchor);
     }
