@@ -28,8 +28,9 @@ st.markdown("""
         border-radius: 4px;
         margin-bottom: .75rem;
       }
+      /* shrink comment thumbnails to 80px */
       .comment-image img {
-        max-width: 40px !important;
+        max-width: 80px !important;
         height: auto !important;
         border-radius: 4px;
         margin-right: .5rem;
@@ -79,7 +80,13 @@ grouped, order = {}, []
 for p in filtered:
     key = (p["author"], p["date"])
     if key not in grouped:
-        grouped[key] = {"author":key[0],"date":key[1],"text":p.get("text",""),"images":[],"comments":p.get("comments",[])}
+        grouped[key] = {
+            "author": key[0],
+            "date":   key[1],
+            "text":   p.get("text",""),
+            "images": [],
+            "comments": p.get("comments",[]),
+        }
         order.append(key)
     grouped[key]["images"].extend(p.get("images",[]))
 grouped_posts = [grouped[k] for k in order]
@@ -88,22 +95,21 @@ st.title("WP RETURNS GROUP – ARCHIVE")
 st.markdown(f"> Showing **{min(len(grouped_posts), st.session_state.count)}** of **{len(grouped_posts)}** posts")
 
 def show_image(path):
-    # if it's a URL already, just pass it to st.image
     if path.startswith("http"):
-        st.image(path, use_container_width=True); return
-    # local file?
+        st.image(path, use_container_width=True)
+        return
     if os.path.exists(path):
-        st.image(path, use_container_width=True); return
-    # fall back to GitHub raw
-    # strip out everything before the final /media/ folder:
+        st.image(path, use_container_width=True)
+        return
     parts = path.replace("\\","/").split("/media/")
     if len(parts)==2:
         rel = parts[1]
         url = f"{GITHUB_RAW_MEDIA}/{rel}"
         st.image(url, use_container_width=True)
     else:
-        st.write(f"🔗 {path}")  # can't resolve
+        st.write(f"🔗 {path}")
 
+# ——— MAIN DISPLAY ———
 for post in grouped_posts[: st.session_state.count]:
     st.markdown('<div class="post-card">', unsafe_allow_html=True)
     c1, c2 = st.columns([3,1])
@@ -117,13 +123,13 @@ for post in grouped_posts[: st.session_state.count]:
     if post["images"]:
         cols = st.columns(len(post["images"]))
         for col,img in zip(cols, post["images"]):
-            with col: show_image(img)
+            with col:
+                show_image(img)
 
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
             for c in post["comments"]:
                 st.markdown(f"**{c['author']}**  ·  *{c['date']}*")
-                # inline tags + body
                 lines = c["text"].split("\n"); tags, body = [], []
                 for L in lines:
                     if re.fullmatch(r"(?:[A-Z][a-z]+(?: [A-Z][a-z]+)*)", L):
@@ -143,7 +149,7 @@ for post in grouped_posts[: st.session_state.count]:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# infinite-scroll “Load more” anchor
+# ——— INFINITE SCROLL ANCHOR ———
 components.html("""
   <div id="scroll-anchor" style="height:1px;margin-top:-1px;"></div>
   <script>
