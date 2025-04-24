@@ -13,48 +13,39 @@ st.set_page_config(
 
 # ——— GLOBAL STYLES ———
 st.markdown("""
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-    html, body, [class*="css"] { font-family: 'Roboto', sans-serif; }
-
-    /* Card wrapper: less padding & margin between posts */
-    .post-card {
-      background: #fff;
-      padding: 0.75rem;          /* was 1rem */
-      margin-bottom: 0.5rem;     /* was 1.5rem */
-      border-radius: 8px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-    }
-
-    /* Tighter spacing around the divider lines */
-    .stMarkdown hr {
-      margin-top: 0.5rem;
-      margin-bottom: 0.5rem;
-    }
-
-    /* Main images */
-    .post-card img {
-      max-width: 70% !important;
-      height: auto !important;
-      border-radius: 4px;
-      margin-bottom: 0.5rem;     /* was 0.75rem */
-    }
-
-    /* Comment thumbnails */
-    .comment-image img {
-      max-width: 100px !important; /* smaller thumbs */
-      margin-right: 0.5rem;
-    }
-
-    /* Text sizing (unchanged) */
-    h1 { font-size:3rem !important; }
-    h3 { font-size:1.75rem !important; }
-    p  { font-size:1.25rem !important; line-height:1.6 !important; }
-    .streamlit-expanderHeader { font-size:1.4rem !important; font-weight:500 !important; }
-    .stTextInput input { font-size:1.1rem !important; }
-    .streamlit-expanderContent > div { margin-bottom:1rem; }
-    .block-container { padding-top:1rem; }
-  </style>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+      html, body, [class*="css"] { font-family: 'Roboto', sans-serif; }
+      .post-card { 
+        background: #fff; 
+        padding:0.75rem; 
+        margin-bottom:0.5rem;
+        border-radius:8px; 
+        box-shadow:0 1px 4px rgba(0,0,0,0.1);
+      }
+      .stMarkdown hr {
+        margin-top:0.5rem; 
+        margin-bottom:0.5rem;
+      }
+      .post-card img {
+        max-width:70% !important;
+        height:auto !important;
+        border-radius:4px;
+        margin-bottom:0.5rem;
+      }
+      .comment-image img {
+        max-width:100px !important;
+        height:auto !important;
+        margin-right:0.5rem;
+      }
+      h1 { font-size:3rem !important; }
+      h3 { font-size:1.75rem !important; }
+      p  { font-size:1.25rem !important; line-height:1.6 !important; }
+      .streamlit-expanderHeader { font-size:1.4rem !important; font-weight:500 !important; }
+      .stTextInput input { font-size:1.1rem !important; }
+      .streamlit-expanderContent > div { margin-bottom:1rem; }
+      .block-container { padding-top:1rem; }
+    </style>
 """, unsafe_allow_html=True)
 
 # ——— CONFIG ———
@@ -68,8 +59,7 @@ GITHUB_RAW_MEDIA = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETUR
 def load_posts():
     if os.path.exists(LOCAL_JSON):
         return json.load(open(LOCAL_JSON, "r", encoding="utf-8"))
-    r = requests.get(GITHUB_RAW_JSON, timeout=10)
-    r.raise_for_status()
+    r = requests.get(GITHUB_RAW_JSON, timeout=10); r.raise_for_status()
     return r.json()
 
 def parse_date(s):
@@ -93,25 +83,23 @@ def show_image(path):
 # ——— LOAD DATA ———
 posts = load_posts()
 
-# ——— SIDEBAR ———
+# ——— SIDEBAR FILTERS ———
 st.sidebar.title("🔍 Filters")
 q = st.sidebar.text_input("Keyword")
 
-# date‐picker range
+# build list of parseable dates
 all_dates = [d for d in (parse_date(p["date"]) for p in posts) if d]
 mn = min(all_dates) if all_dates else date.today()
-mx = date.today()
+default_end = date.today()
+
 start, end = st.sidebar.date_input(
     "Date range",
-    value=[mn, mx],
+    value=[mn, default_end],
     min_value=mn,
-    max_value=mx,
+    max_value=default_end,
 )
 
-# sort order
-sort_order = st.sidebar.selectbox("Sort by", ["Newest first", "Oldest first"])
-
-# Load more / all
+# “Load more” & “Load all”
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
 c1, c2 = st.sidebar.columns(2)
@@ -127,36 +115,37 @@ def matches(p):
     return any(t in c.get("text","").lower() for c in p.get("comments",[]))
 
 filtered = [p for p in posts if (not q or matches(p))]
+
 def in_range(p):
     d = parse_date(p["date"])
     return d and (start <= d <= end)
+
 filtered = [p for p in filtered if in_range(p)]
 
-# ——— GROUP DUPLICATES ———
-grouped = {}
-order_keys = []
+# ——— SMART GROUPING ———
+grouped_posts = []
 for p in filtered:
-    key = (p["author"], p["date"])
-    if key not in grouped:
-        grouped[key] = {
-            "author":   key[0],
-            "date":     key[1],
-            "text":     p.get("text",""),
-            "images":   [],
-            "comments": p.get("comments",[]),
-        }
-        order_keys.append(key)
-    grouped[key]["images"].extend(p.get("images",[]))
-grouped_posts = [grouped[k] for k in order_keys]
-
-# ——— APPLY SORT ———
-# posts.json is naturally newest-first; reverse if needed
-if sort_order == "Oldest first":
-    grouped_posts = list(reversed(grouped_posts))
+    author, date_s, text = p["author"], p["date"], p.get("text","").strip()
+    images, comments = p.get("images",[]), p.get("comments",[])
+    if text == "" and grouped_posts:
+        # only append blanks to previous if same author/date
+        last = grouped_posts[-1]
+        if last["author"] == author and last["date"] == date_s:
+            last["images"].extend(images)
+            last["comments"].extend(comments)
+            continue
+    # otherwise start a brand-new card
+    grouped_posts.append({
+        "author":   author,
+        "date":     date_s,
+        "text":     text,
+        "images":   images.copy(),
+        "comments": comments.copy()
+    })
 
 # ——— RENDER ———
 st.title("WP RETURNS GROUP – ARCHIVE")
-st.markdown(f"> Showing **{min(len(grouped_posts), st.session_state.count)}** of **{len(grouped_posts)}** posts  •  Sorted: **{sort_order}**")
+st.markdown(f"> Showing **{min(len(grouped_posts), st.session_state.count)}** of **{len(grouped_posts)}** posts")
 
 for post in grouped_posts[: st.session_state.count]:
     st.markdown('<div class="post-card">', unsafe_allow_html=True)
@@ -165,15 +154,12 @@ for post in grouped_posts[: st.session_state.count]:
         st.markdown(f"### {post['author']}  ·  *{post['date']}*")
     with col2:
         st.write("")
-
     if post["text"]:
         st.write(post["text"])
     if post["images"]:
         cols = st.columns(len(post["images"]))
-        for c, img in zip(cols, post["images"]):
-            with c:
-                show_image(img)
-
+        for c,img in zip(cols, post["images"]):
+            with c: show_image(img)
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
             for c in post["comments"]:
@@ -185,7 +171,7 @@ for post in grouped_posts[: st.session_state.count]:
                 st.write(txt)
                 if c.get("images"):
                     thumbs = st.columns(len(c["images"]))
-                    for tc, im in zip(thumbs, c["images"]):
+                    for tc,im in zip(thumbs, c["images"]):
                         with tc:
                             st.markdown('<div class="comment-image">', unsafe_allow_html=True)
                             show_image(im)
