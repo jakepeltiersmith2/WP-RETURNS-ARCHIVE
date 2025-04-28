@@ -29,14 +29,6 @@ st.markdown("""
       .stTextInput input { font-size:1rem !important; }
       .streamlit-expanderContent > div { margin-bottom:0.75rem; }
       .block-container { padding-top:1rem; }
-
-      /* —— New comment block style —— */
-      .comment-block {
-          background-color: #f9f9f9;
-          padding: 0.75rem;
-          border-radius: 8px;
-          margin-bottom: 1.5rem;
-      }
     </style>
 """, unsafe_allow_html=True)
 
@@ -62,14 +54,13 @@ def parse_date(s: str):
         return None
 
 def show_image(path, thumb=False):
+    """thumb=True → fixed 300px; else container_width"""
     width = 300 if thumb else None
     use_container = False if thumb else True
     if path.startswith("http"):
-        st.image(path, width=width, use_container_width=use_container)
-        return
+        st.image(path, width=width, use_container_width=use_container); return
     if os.path.exists(path):
-        st.image(path, width=width, use_container_width=use_container)
-        return
+        st.image(path, width=width, use_container_width=use_container); return
     parts = path.replace("\\","/").split("/media/")
     if len(parts)==2:
         url = f"{GITHUB_RAW_MEDIA}/{parts[1]}"
@@ -84,6 +75,7 @@ posts = load_posts()
 st.sidebar.title("🔍 Filters")
 q = st.sidebar.text_input("Keyword")
 
+# date‐range picker
 all_dates = [d for d in (parse_date(p["date"]) for p in posts) if d]
 mn = min(all_dates) if all_dates else date.today()
 mx = date.today()
@@ -91,8 +83,10 @@ start, end = st.sidebar.date_input(
     "Date range", [mn, mx], min_value=mn, max_value=mx
 )
 
+# sort order
 sort_by = st.sidebar.selectbox("Sort by", ["Newest first", "Oldest first"])
 
+# Load-more / Load-all buttons
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
 c1, c2 = st.sidebar.columns(2)
@@ -129,9 +123,10 @@ for p in filtered:
         }
         order_keys.append(key)
     grouped[key]["images"].extend(p.get("images",[]))
-grouped_posts = [grouped[k] for k in order_keys]
+grouped_posts = [ grouped[k] for k in order_keys ]
 
 # ——— SORTING ———
+# parse each post's date
 grouped_posts = [
     (parse_date(p["date"]) or date.today(), p)
     for p in grouped_posts
@@ -154,7 +149,6 @@ for post in grouped_posts[: st.session_state.count]:
 
     if post["text"]:
         st.write(post["text"])
-
     if post["images"]:
         cols = st.columns(len(post["images"]))
         for c, img in zip(cols, post["images"]):
@@ -163,37 +157,18 @@ for post in grouped_posts[: st.session_state.count]:
 
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
-            for idx, c in enumerate(post["comments"]):
-                # Grey background for each comment
-                st.markdown('<div class="comment-block">', unsafe_allow_html=True)
-
-                # Render comment author + date
+            for c in post["comments"]:
                 st.markdown(f"**{c['author']}**  ·  *{c['date']}*")
-
-                # Build comment text
                 lines = c["text"].split("\n")
-                tags = [line.strip() for line in lines if re.fullmatch(r"(?:[A-Z][a-z]+(?: [A-Z][a-z]+)*)", line.strip())]
-                body = [line.strip() for line in lines if line.strip() and line.strip() not in tags]
-
-                comment_text_parts = []
-                if tags:
-                    comment_text_parts.append(" ".join(f"**{tag}**" for tag in tags))
-                if body:
-                    comment_text_parts.append(" ".join(body))
-
-                comment_final = "\n\n".join(comment_text_parts)
-
-                st.markdown(comment_final)
-
-                # Comment images
+                tags = [L for L in lines if re.fullmatch(r"(?:[A-Z][a-z]+(?: [A-Z][a-z]+)*)", L)]
+                body = [L for L in lines if L not in tags]
+                txt = ("**" + " ".join(tags) + "** " if tags else "") + " ".join(body).strip()
+                st.write(txt)
                 if c.get("images"):
                     thumbs = st.columns(len(c["images"]))
                     for tc, im in zip(thumbs, c["images"]):
                         with tc:
                             show_image(im, thumb=True)
-
-                st.markdown('</div>', unsafe_allow_html=True)
-
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ——— INFINITE SCROLL ———
