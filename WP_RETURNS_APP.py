@@ -54,12 +54,15 @@ def parse_date(s: str):
         return None
 
 def show_image(path, thumb=False):
+    """Display image from local or remote sources."""
     width = 300 if thumb else None
     use_container = False if thumb else True
     if path.startswith("http"):
-        st.image(path, width=width, use_container_width=use_container); return
+        st.image(path, width=width, use_container_width=use_container)
+        return
     if os.path.exists(path):
-        st.image(path, width=width, use_container_width=use_container); return
+        st.image(path, width=width, use_container_width=use_container)
+        return
     parts = path.replace("\\","/").split("/media/")
     if len(parts)==2:
         url = f"{GITHUB_RAW_MEDIA}/{parts[1]}"
@@ -119,7 +122,7 @@ for p in filtered:
         }
         order_keys.append(key)
     grouped[key]["images"].extend(p.get("images",[]))
-grouped_posts = [ grouped[k] for k in order_keys ]
+grouped_posts = [grouped[k] for k in order_keys]
 
 # ——— SORTING ———
 grouped_posts = [
@@ -154,32 +157,38 @@ for post in grouped_posts[: st.session_state.count]:
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
             for idx, c in enumerate(post["comments"]):
-                # Author and Date
+                # Render comment author and date on one line
                 st.markdown(f"**{c['author']}**  ·  *{c['date']}*")
-
-                # Comment text
+                
+                # Process the comment text from JSON.
+                # It may include one or more lines with names that should be bolded,
+                # and then the rest of the comment text.
                 lines = c["text"].split("\n")
-                tags = [L.strip() for L in lines if re.fullmatch(r"(?:[A-Z][a-z]+(?: [A-Z][a-z]+)*)", L.strip())]
-                body = [L.strip() for L in lines if L.strip() and L.strip() not in tags]
-
-                comment_text = ""
-
-                # Bolded tags under author
+                # Identify lines that look like a person’s name (assume format: Capitalized words)
+                tags = [line.strip() for line in lines if re.fullmatch(r"(?:[A-Z][a-z]+(?: [A-Z][a-z]+)*)", line.strip())]
+                # The rest is considered body text.
+                body = [line.strip() for line in lines if line.strip() and line.strip() not in tags]
+                
+                # Join bolded names inline and then the body text.
+                # Bold each name and join them with a space.
                 if tags:
-                    comment_text += "**" + " ".join(tags) + "**\n\n"
-
-                # Add body text after
-                comment_text += "\n".join(body)
-
+                    bold_tags = " ".join([f"**{tag}**" for tag in tags])
+                    # Join the body text with a space to keep it inline.
+                    joined_body = " ".join(body)
+                    comment_text = f"{bold_tags} {joined_body}".strip()
+                else:
+                    comment_text = " ".join(body)
+                    
                 st.markdown(comment_text)
 
+                # Render any comment images.
                 if c.get("images"):
                     thumbs = st.columns(len(c["images"]))
                     for tc, im in zip(thumbs, c["images"]):
                         with tc:
                             show_image(im, thumb=True)
 
-                # Gap between comments
+                # Add a spacer between separate comments.
                 if idx < len(post["comments"]) - 1:
                     st.markdown("<div style='margin-top:2rem;'></div>", unsafe_allow_html=True)
 
