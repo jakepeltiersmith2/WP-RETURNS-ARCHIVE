@@ -33,7 +33,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ——— CONFIG ———
-PAGE_SIZE        = 200
+PAGE_SIZE        = 50
 LOCAL_JSON       = os.path.join(os.path.dirname(__file__), "returns_posts.json")
 GITHUB_RAW_JSON  = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/returns_posts.json"
 GITHUB_RAW_MEDIA = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/media"
@@ -54,7 +54,6 @@ def parse_date(s: str):
         return None
 
 def show_image(path, thumb=False):
-    """thumb=True → fixed 300px; else container_width"""
     width = 300 if thumb else None
     use_container = False if thumb else True
     if path.startswith("http"):
@@ -75,7 +74,6 @@ posts = load_posts()
 st.sidebar.title("🔍 Filters")
 q = st.sidebar.text_input("Keyword")
 
-# date‐range picker
 all_dates = [d for d in (parse_date(p["date"]) for p in posts) if d]
 mn = min(all_dates) if all_dates else date.today()
 mx = date.today()
@@ -83,10 +81,8 @@ start, end = st.sidebar.date_input(
     "Date range", [mn, mx], min_value=mn, max_value=mx
 )
 
-# sort order
 sort_by = st.sidebar.selectbox("Sort by", ["Newest first", "Oldest first"])
 
-# Load-more / Load-all buttons
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
 c1, c2 = st.sidebar.columns(2)
@@ -126,7 +122,6 @@ for p in filtered:
 grouped_posts = [ grouped[k] for k in order_keys ]
 
 # ——— SORTING ———
-# parse each post's date
 grouped_posts = [
     (parse_date(p["date"]) or date.today(), p)
     for p in grouped_posts
@@ -149,6 +144,7 @@ for post in grouped_posts[: st.session_state.count]:
 
     if post["text"]:
         st.write(post["text"])
+
     if post["images"]:
         cols = st.columns(len(post["images"]))
         for c, img in zip(cols, post["images"]):
@@ -157,18 +153,32 @@ for post in grouped_posts[: st.session_state.count]:
 
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
-            for c in post["comments"]:
+            for idx, c in enumerate(post["comments"]):
                 st.markdown(f"**{c['author']}**  ·  *{c['date']}*")
+
                 lines = c["text"].split("\n")
-                tags = [L for L in lines if re.fullmatch(r"(?:[A-Z][a-z]+(?: [A-Z][a-z]+)*)", L)]
-                body = [L for L in lines if L not in tags]
-                txt = ("**" + " ".join(tags) + "** " if tags else "") + " ".join(body).strip()
-                st.write(txt)
+                tags = [L.strip() for L in lines if re.fullmatch(r"(?:[A-Z][a-z]+(?: [A-Z][a-z]+)*)", L.strip())]
+                body = [L.strip() for L in lines if L.strip() and L.strip() not in tags]
+
+                comment_text = ""
+
+                if tags:
+                    comment_text += "**" + " ".join(tags) + "**\n\n"
+
+                comment_text += "\n".join(body)
+
+                st.markdown(comment_text)
+
                 if c.get("images"):
                     thumbs = st.columns(len(c["images"]))
                     for tc, im in zip(thumbs, c["images"]):
                         with tc:
                             show_image(im, thumb=True)
+
+                # Spacer between comments (but not after last comment)
+                if idx < len(post["comments"]) - 1:
+                    st.markdown("<div style='margin-top:1.5rem;'></div>", unsafe_allow_html=True)
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ——— INFINITE SCROLL ———
