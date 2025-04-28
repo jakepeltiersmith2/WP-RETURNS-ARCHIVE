@@ -154,17 +154,21 @@ for post in grouped_posts[: st.session_state.count]:
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
             for idx, c in enumerate(post["comments"]):
+                # Author and Date
                 st.markdown(f"**{c['author']}**  ·  *{c['date']}*")
 
+                # Comment text
                 lines = c["text"].split("\n")
                 tags = [L.strip() for L in lines if re.fullmatch(r"(?:[A-Z][a-z]+(?: [A-Z][a-z]+)*)", L.strip())]
                 body = [L.strip() for L in lines if L.strip() and L.strip() not in tags]
 
                 comment_text = ""
 
+                # Bolded tags under author
                 if tags:
                     comment_text += "**" + " ".join(tags) + "**\n\n"
 
+                # Add body text after
                 comment_text += "\n".join(body)
 
                 st.markdown(comment_text)
@@ -175,9 +179,9 @@ for post in grouped_posts[: st.session_state.count]:
                         with tc:
                             show_image(im, thumb=True)
 
-                # Spacer between comments (but not after last comment)
+                # Gap between comments
                 if idx < len(post["comments"]) - 1:
-                    st.markdown("<div style='margin-top:1.5rem;'></div>", unsafe_allow_html=True)
+                    st.markdown("<div style='margin-top:2rem;'></div>", unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
