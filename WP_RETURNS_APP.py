@@ -29,6 +29,14 @@ st.markdown("""
       .stTextInput input { font-size:1rem !important; }
       .streamlit-expanderContent > div { margin-bottom:0.75rem; }
       .block-container { padding-top:1rem; }
+
+      /* —— New comment block style —— */
+      .comment-block {
+          background-color: #f9f9f9;
+          padding: 0.75rem;
+          border-radius: 8px;
+          margin-bottom: 1.5rem;
+      }
     </style>
 """, unsafe_allow_html=True)
 
@@ -54,7 +62,6 @@ def parse_date(s: str):
         return None
 
 def show_image(path, thumb=False):
-    """Display image from local or remote sources."""
     width = 300 if thumb else None
     use_container = False if thumb else True
     if path.startswith("http"):
@@ -157,40 +164,35 @@ for post in grouped_posts[: st.session_state.count]:
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
             for idx, c in enumerate(post["comments"]):
-                # Render comment author and date on one line
-                st.markdown(f"**{c['author']}**  ·  *{c['date']}*")
-                
-                # Process the comment text from JSON.
-                # It may include one or more lines with names that should be bolded,
-                # and then the rest of the comment text.
-                lines = c["text"].split("\n")
-                # Identify lines that look like a person’s name (assume format: Capitalized words)
-                tags = [line.strip() for line in lines if re.fullmatch(r"(?:[A-Z][a-z]+(?: [A-Z][a-z]+)*)", line.strip())]
-                # The rest is considered body text.
-                body = [line.strip() for line in lines if line.strip() and line.strip() not in tags]
-                
-                # Join bolded names inline and then the body text.
-                # Bold each name and join them with a space.
-                if tags:
-                    bold_tags = " ".join([f"**{tag}**" for tag in tags])
-                    # Join the body text with a space to keep it inline.
-                    joined_body = " ".join(body)
-                    comment_text = f"{bold_tags} {joined_body}".strip()
-                else:
-                    comment_text = " ".join(body)
-                    
-                st.markdown(comment_text)
+                # Grey background for each comment
+                st.markdown('<div class="comment-block">', unsafe_allow_html=True)
 
-                # Render any comment images.
+                # Render comment author + date
+                st.markdown(f"**{c['author']}**  ·  *{c['date']}*")
+
+                # Build comment text
+                lines = c["text"].split("\n")
+                tags = [line.strip() for line in lines if re.fullmatch(r"(?:[A-Z][a-z]+(?: [A-Z][a-z]+)*)", line.strip())]
+                body = [line.strip() for line in lines if line.strip() and line.strip() not in tags]
+
+                comment_text_parts = []
+                if tags:
+                    comment_text_parts.append(" ".join(f"**{tag}**" for tag in tags))
+                if body:
+                    comment_text_parts.append(" ".join(body))
+
+                comment_final = "\n\n".join(comment_text_parts)
+
+                st.markdown(comment_final)
+
+                # Comment images
                 if c.get("images"):
                     thumbs = st.columns(len(c["images"]))
                     for tc, im in zip(thumbs, c["images"]):
                         with tc:
                             show_image(im, thumb=True)
 
-                # Add a spacer between separate comments.
-                if idx < len(post["comments"]) - 1:
-                    st.markdown("<div style='margin-top:2rem;'></div>", unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
