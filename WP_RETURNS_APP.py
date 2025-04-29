@@ -33,7 +33,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ——— CONFIG ———
-PAGE_SIZE       = 50
+PAGE_SIZE       = 250
 LOCAL_JSON      = os.path.join(os.path.dirname(__file__), "returns_posts.json")
 GITHUB_RAW_MEDIA = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/media"
 
