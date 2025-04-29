@@ -33,25 +33,23 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ——— CONFIG ———
-PAGE_SIZE        = 50
-LOCAL_JSON       = os.path.join(os.path.dirname(__file__), "returns_posts.json")
+PAGE_SIZE       = 50
+LOCAL_JSON      = os.path.join(os.path.dirname(__file__), "returns_posts.json")
 GITHUB_RAW_MEDIA = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/media"
 
 # ——— UTILITIES ———
-@st.cache_data
 def load_posts():
-    # Always load from the bundled local JSON file
+    # Always load fresh from local JSON
     with open(LOCAL_JSON, "r", encoding="utf-8") as f:
         return json.load(f)
 
 def parse_date(s: str):
     try:
-        return parser.parse(s, dayfirst=True).date()
+        return parser.parse(s).date()
     except:
         return None
 
 def format_datetime(s: str) -> str:
-    """Convert an ISO timestamp to 'DD Month YYYY at HH:MM'."""
     try:
         dt = parser.parse(s)
         return dt.strftime("%d %B %Y at %H:%M")
@@ -59,9 +57,8 @@ def format_datetime(s: str) -> str:
         return s
 
 def show_image(path, thumb=False):
-    """thumb=True → fixed 300px; else container_width"""
     width = 300 if thumb else None
-    use_container = False if thumb else True
+    use_container = not thumb
     if path.startswith("http"):
         st.image(path, width=width, use_container_width=use_container)
         return
@@ -77,6 +74,8 @@ def show_image(path, thumb=False):
 
 # ——— LOAD DATA ———
 posts = load_posts()
+# DEBUG: show total posts loaded
+st.sidebar.write(f"⚙️ Loaded {len(posts)} posts from JSON")
 
 # ——— SIDEBAR FILTERS ———
 st.sidebar.title("🔍 Filters")
@@ -86,14 +85,12 @@ q = st.sidebar.text_input("Keyword")
 all_dates = [d for d in (parse_date(p["date"]) for p in posts) if d]
 mn = min(all_dates) if all_dates else date.today()
 mx = date.today()
-start, end = st.sidebar.date_input(
-    "Date range", [mn, mx], min_value=mn, max_value=mx
-)
+start, end = st.sidebar.date_input("Date range", [mn, mx], min_value=mn, max_value=mx)
 
 # sort order
 sort_by = st.sidebar.selectbox("Sort by", ["Newest first", "Oldest first"])
 
-# Load-more / Load-all buttons
+# Load-more / Load-all
 if "count" not in st.session_state:
     st.session_state.count = PAGE_SIZE
 c1, c2 = st.sidebar.columns(2)
@@ -110,15 +107,12 @@ def matches(p):
     return any(t in c.get("text","").lower() for c in p.get("comments", []))
 
 filtered = [p for p in posts if (not q or matches(p))]
+filtered = [p for p in filtered if (d:=parse_date(p["date"])) and start <= d <= end]
 
-def in_range(p):
-    d = parse_date(p["date"])
-    return d and (start <= d <= end)
-
-filtered = [p for p in filtered if in_range(p)]
+# DEBUG: show posts after filtering
+st.sidebar.write(f"⚙️ {len(filtered)} posts after filters")
 
 # ——— SKIP DUPLICATES ———
-# With API data there are no true duplicates, so just render filtered directly
 grouped_posts = filtered
 
 # ——— SORTING ———
