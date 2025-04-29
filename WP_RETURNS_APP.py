@@ -33,7 +33,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ——— CONFIG ———
-PAGE_SIZE        = 200
+PAGE_SIZE        = 50
 LOCAL_JSON       = os.path.join(os.path.dirname(__file__), "returns_posts.json")
 GITHUB_RAW_JSON  = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/returns_posts.json"
 GITHUB_RAW_MEDIA = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/media"
@@ -66,11 +66,13 @@ def show_image(path, thumb=False):
     width = 300 if thumb else None
     use_container = False if thumb else True
     if path.startswith("http"):
-        st.image(path, width=width, use_container_width=use_container); return
+        st.image(path, width=width, use_container_width=use_container)
+        return
     if os.path.exists(path):
-        st.image(path, width=width, use_container_width=use_container); return
+        st.image(path, width=width, use_container_width=use_container)
+        return
     parts = path.replace("\\","/").split("/media/")
-    if len(parts)==2:
+    if len(parts) == 2:
         url = f"{GITHUB_RAW_MEDIA}/{parts[1]}"
         st.image(url, width=width, use_container_width=use_container)
     else:
@@ -83,7 +85,7 @@ posts = load_posts()
 st.sidebar.title("🔍 Filters")
 q = st.sidebar.text_input("Keyword")
 
-# date‐range picker
+# date-range picker
 all_dates = [d for d in (parse_date(p["date"]) for p in posts) if d]
 mn = min(all_dates) if all_dates else date.today()
 mx = date.today()
@@ -106,42 +108,25 @@ if c2.button("Load all"):
 # ——— FILTER & RANGE ———
 def matches(p):
     t = q.lower()
-    if t and t in p.get("text","").lower(): return True
-    return any(t in c.get("text","").lower() for c in p.get("comments",[]))
+    if t and t in p.get("text","").lower(): 
+        return True
+    return any(t in c.get("text","").lower() for c in p.get("comments", []))
 
 filtered = [p for p in posts if (not q or matches(p))]
+
 def in_range(p):
     d = parse_date(p["date"])
     return d and (start <= d <= end)
+
 filtered = [p for p in filtered if in_range(p)]
 
-# ——— GROUP DUPLICATES ———
-grouped = {}
-order_keys = []
-for p in filtered:
-    key = (p["author"], p["date"], p.get("text",""))
-    is_empty = (p.get("text","") == "")
-    if key not in grouped or not is_empty:
-        grouped[key] = {
-            "author":   key[0],
-            "date":     key[1],
-            "text":     p.get("text",""),
-            "images":   [],
-            "comments": p.get("comments",[]),
-        }
-        order_keys.append(key)
-    grouped[key]["images"].extend(p.get("images",[]))
-grouped_posts = [ grouped[k] for k in order_keys ]
+# ——— SKIP DUPLICATES ———
+# API data has no true duplicates, so render filtered directly
+grouped_posts = filtered
 
 # ——— SORTING ———
-# parse each post's date
-grouped_posts = [
-    (parse_date(p["date"]) or date.today(), p)
-    for p in grouped_posts
-]
 reverse = (sort_by == "Newest first")
-grouped_posts.sort(key=lambda x: x[0], reverse=reverse)
-grouped_posts = [p for _, p in grouped_posts]
+grouped_posts.sort(key=lambda p: parse_date(p["date"]) or date.today(), reverse=reverse)
 
 # ——— RENDER ———
 st.title("WP RETURNS GROUP – ARCHIVE")
@@ -149,7 +134,7 @@ st.markdown(f"> Showing **{min(len(grouped_posts), st.session_state.count)}** of
 
 for post in grouped_posts[: st.session_state.count]:
     st.markdown('<div class="post-card">', unsafe_allow_html=True)
-    col1, col2 = st.columns([3,1])
+    col1, col2 = st.columns([3, 1])
     with col1:
         nice_date = format_datetime(post["date"])
         st.markdown(f"### {post['author']}  ·  *{nice_date}*")
