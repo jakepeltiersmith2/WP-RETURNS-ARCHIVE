@@ -24,7 +24,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 WORKPLACE_URL = "https://sbinteriorscouk434.workplace.com"
 MEDIA_URL     = f"{WORKPLACE_URL}/groups/4632360133479201/media"
 
-OUTPUT_DIR    = r"\\sbi-srv-10\GeneralShares\Company\Systems\RETURNS ARCHIVE"
+OUTPUT_DIR    = r"C:\RETURNS ARCHIVE"
 MEDIA_ROOT    = os.path.join(OUTPUT_DIR, "media")
 COOKIES_FILE  = os.path.join(OUTPUT_DIR, "cookies.pkl")
 OUTPUT_JSON   = os.path.join(OUTPUT_DIR, "returns_posts.json")
@@ -224,7 +224,7 @@ def expand_all_replies(driver, comment_xpath):
 
 
 def scrape_from_media_images(driver):
-    posts_map = load_existing_posts()  # OrderedDict
+    posts_map = load_existing_posts()
     comment_xpath = (
         "//div[starts-with(@aria-label,'Comment by') or starts-with(@aria-label,'Reply by')]"
     )
@@ -237,10 +237,10 @@ def scrape_from_media_images(driver):
         post_url = img.find_element(By.XPATH, "./ancestor::a[1]").get_attribute("href")
         exists   = post_url in posts_map
 
-        if exists:
-            logging.debug(f"[{idx}/{total}] Re-checking {post_url}")
-        else:
+        if not exists:
             logging.info(f"[{idx}/{total}] Scraping NEW {post_url}")
+        else:
+            logging.debug(f"[{idx}/{total}] Re-checking {post_url}")
 
         for attempt in range(1,4):
             try:
@@ -249,7 +249,7 @@ def scrape_from_media_images(driver):
                 driver.switch_to.window(driver.window_handles[-1])
                 WebDriverWait(driver,10).until(lambda d: d.current_url != MEDIA_URL)
 
-                # —— author & date —— #
+                # —— author & date & text logic unchanged —— #
                 author = driver.find_element(
                     By.XPATH, "/html/body/div[1]//span/div/h2//a"
                 ).text
@@ -257,15 +257,11 @@ def scrape_from_media_images(driver):
                     By.XPATH, "/html/body/div[1]//div/div[2]/span/div/span[1]/span/span/a"
                 )
                 date = date_elem.get_attribute("aria-label") or date_elem.text
-
-                # —— expand “See more” —— #
                 try:
                     driver.find_element(By.XPATH, "//div[text()='See more']").click()
                     time.sleep(0.3)
                 except NoSuchElementException:
                     pass
-
-                # —— post text —— #
                 try:
                     cont = driver.find_element(By.XPATH,
                         "/html/body/div[1]/div/div[1]/div/div/div[2]/div[3]/div/div/"
@@ -291,7 +287,7 @@ def scrape_from_media_images(driver):
                     download_image_to(pth, url)
                     local_images.append(pth)
 
-                # —— expand & stabilize replies —— #
+                # —— expand replies —— #
                 expand_all_replies(driver, comment_xpath)
                 prev = len(driver.find_elements(By.XPATH, comment_xpath))
                 stable = 0
@@ -303,52 +299,46 @@ def scrape_from_media_images(driver):
                     else:
                         prev, stable = curr, 0
 
-                # —— scrape comments/replies —— #
+                # —— scrape comments, with new author/text logic —— #
                 cmts = []
                 comment_dir = os.path.join(post_dir, "comments")
                 os.makedirs(comment_dir, exist_ok=True)
 
                 for cdiv in driver.find_elements(By.XPATH, comment_xpath):
-                    label = cdiv.get_attribute("aria-label") or ""
-                    m = re.match(r"^(Comment|Reply) by (.+?) a (.+)$", label)
-                    if m:
-                        c_author, c_date = m.group(2), m.group(3)
-                    else:
-                        try:
-                            c_author = cdiv.find_element(
-                                By.CSS_SELECTOR, "a[href*='profile.php']"
-                            ).text
-                        except:
-                            c_author = ""
-                        try:
-                            c_date = cdiv.find_element(
-                                By.CSS_SELECTOR, "a[href*='comment_id']"
-                            ).text
-                        except:
-                            c_date = ""
+                    # collect all non-empty lines of comment
+                    lines = [
+                        span.text.strip()
+                        for span in cdiv.find_elements(By.CSS_SELECTOR, "span[dir='auto']")
+                        if span.text.strip()
+                    ]
+                    # first line is author, rest is text
+                    c_author = lines[0] if lines else ""
+                    c_text = "\n".join(lines[1:]) if len(lines) > 1 else ""
 
-                    parts = []
-                    for sp in cdiv.find_elements(By.CSS_SELECTOR, "span[dir='auto']"):
-                        t = sp.text.strip()
-                        if t and t not in (c_author, c_date):
-                            parts.append(t)
-                    body = "\n".join(parts)
+                    # grab date
+                    try:
+                        c_date = cdiv.find_element(
+                            By.CSS_SELECTOR, "a[href*='comment_id']"
+                        ).text
+                    except:
+                        c_date = ""
 
+                    # download any images in comment
                     imgs = []
-                    for i, im in enumerate(cdiv.find_elements(
-                        By.CSS_SELECTOR, "img[src*='fbcdn']"
-                    ), start=1):
-                        u = im.get_attribute("src")
-                        ext = os.path.splitext(u.split("?",1)[0])[1] or ".jpg"
+                    for i, im in enumerate(cdiv.find_elements(By.TAG_NAME, "img"), start=1):
+                        src = im.get_attribute("src") or ""
+                        if "data:image" in src or "profile" in src:
+                            continue
+                        ext = os.path.splitext(src.split("?",1)[0])[1] or ".jpg"
                         fn = f"{pid}_c{i}{ext}"
                         pth = os.path.join(comment_dir, fn)
-                        download_image_to(pth, u)
+                        download_image_to(pth, src)
                         imgs.append(pth)
 
                     cmts.append({
                         "author": c_author,
                         "date":   c_date,
-                        "text":   body,
+                        "text":   c_text,
                         "images": imgs
                     })
 
@@ -361,19 +351,16 @@ def scrape_from_media_images(driver):
                     "comments": cmts
                 }
 
-                # —— insert or update —— #
+                # —— insert or update in posts_map —— #
                 if not exists:
-                    # prepend brand-new posts
                     updated = OrderedDict()
                     updated[post_url] = new_entry
-                    for k, v in posts_map.items():
-                        updated[k] = v
+                    updated.update(posts_map)
                     posts_map.clear()
                     posts_map.update(updated)
                     logging.info(f"Prepended new post: {post_url}")
                     save_posts_map(posts_map)
                 else:
-                    # replace only if anything changed
                     if new_entry != posts_map[post_url]:
                         logging.info(f"Updating changed post: {post_url}")
                         posts_map[post_url] = new_entry
@@ -381,10 +368,10 @@ def scrape_from_media_images(driver):
                     else:
                         logging.debug(f"No change for {post_url}")
 
-                # clean up
+                # clean up and close
                 driver.close()
                 driver.switch_to.window(driver.window_handles[0])
-                break  # success!
+                break
 
             except WebDriverException as e:
                 logging.error(f"[{idx}/{total}] Error on {post_url} (try {attempt}): {e}")
@@ -409,7 +396,7 @@ def main():
             return
 
     scroll_media_page(driver)
-    scrape_from_media_images(driver)   # ← pass driver, not driver()
+    scrape_from_media_images(driver)
     driver.quit()
     logging.info("All done!")
 
