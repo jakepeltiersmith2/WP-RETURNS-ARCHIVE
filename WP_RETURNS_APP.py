@@ -53,6 +53,14 @@ def parse_date(s: str):
     except:
         return None
 
+def format_datetime(s: str) -> str:
+    """Convert an ISO timestamp to 'DD Month YYYY at HH:MM'."""
+    try:
+        dt = parser.parse(s)
+        return dt.strftime("%d %B %Y at %H:%M")
+    except:
+        return s
+
 def show_image(path, thumb=False):
     """thumb=True → fixed 300px; else container_width"""
     width = 300 if thumb else None
@@ -143,7 +151,8 @@ for post in grouped_posts[: st.session_state.count]:
     st.markdown('<div class="post-card">', unsafe_allow_html=True)
     col1, col2 = st.columns([3,1])
     with col1:
-        st.markdown(f"### {post['author']}  ·  *{post['date']}*")
+        nice_date = format_datetime(post["date"])
+        st.markdown(f"### {post['author']}  ·  *{nice_date}*")
     with col2:
         st.write("")
 
@@ -158,7 +167,8 @@ for post in grouped_posts[: st.session_state.count]:
     if post["comments"]:
         with st.expander(f"💬 {len(post['comments'])} comments"):
             for c in post["comments"]:
-                st.markdown(f"**{c['author']}**  ·  *{c['date']}*")
+                c_date = format_datetime(c["date"])
+                st.markdown(f"**{c['author']}**  ·  *{c_date}*")
                 lines = c["text"].split("\n")
                 tags = [L for L in lines if re.fullmatch(r"(?:[A-Z][a-z]+(?: [A-Z][a-z]+)*)", L)]
                 body = [L for L in lines if L not in tags]
