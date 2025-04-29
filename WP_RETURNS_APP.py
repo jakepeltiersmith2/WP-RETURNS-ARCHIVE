@@ -1,6 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import json, os, re, requests
+import json, os, re
 from datetime import date
 from dateutil import parser
 
@@ -35,17 +35,14 @@ st.markdown("""
 # ——— CONFIG ———
 PAGE_SIZE        = 50
 LOCAL_JSON       = os.path.join(os.path.dirname(__file__), "returns_posts.json")
-GITHUB_RAW_JSON  = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/returns_posts.json"
 GITHUB_RAW_MEDIA = "https://raw.githubusercontent.com/jakepeltiersmith2/WP-RETURNS-ARCHIVE/main/media"
 
 # ——— UTILITIES ———
 @st.cache_data
 def load_posts():
-    if os.path.exists(LOCAL_JSON):
-        return json.load(open(LOCAL_JSON, "r", encoding="utf-8"))
-    r = requests.get(GITHUB_RAW_JSON, timeout=10)
-    r.raise_for_status()
-    return r.json()
+    # Always load from the bundled local JSON file
+    with open(LOCAL_JSON, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 def parse_date(s: str):
     try:
@@ -108,7 +105,7 @@ if c2.button("Load all"):
 # ——— FILTER & RANGE ———
 def matches(p):
     t = q.lower()
-    if t and t in p.get("text","").lower(): 
+    if t and t in p.get("text","").lower():
         return True
     return any(t in c.get("text","").lower() for c in p.get("comments", []))
 
@@ -121,7 +118,7 @@ def in_range(p):
 filtered = [p for p in filtered if in_range(p)]
 
 # ——— SKIP DUPLICATES ———
-# API data has no true duplicates, so render filtered directly
+# With API data there are no true duplicates, so just render filtered directly
 grouped_posts = filtered
 
 # ——— SORTING ———
